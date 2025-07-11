@@ -9,6 +9,7 @@ from collections import Counter
 from  class_up import *
 import tkinter as tk
 from tkinter import messagebox
+from class_up import ComandoAgregarEmpleado, ComandoEliminarEmpleado, ComandoVerHistoricoVentas
 
 
 
@@ -164,8 +165,8 @@ def interfaz_admin(ventana_login):
         text="Auditoria",
         width=25,
         bootstyle = "outline-primary",
-        command = abrir_ventana_auditoria
-    ).pack(pady=5)
+        command = lambda: abrir_ventana_auditoria(lista) 
+).pack(pady=5)
 
 
     # Botón para cerrar sesión
@@ -488,7 +489,7 @@ def cambiar_credenciales_admin():
     tb.Button(ventana_cambio, text="Guardar", command=guardar_nuevas_credenciales).pack(pady=10)
 
     
-def abrir_ventana_auditoria():
+def abrir_ventana_auditoria(lista):
     ventana_auditoria = tb.Toplevel()
     ventana_auditoria.title("Auditoria")
     ventana_auditoria.geometry("400x400")
@@ -508,40 +509,97 @@ def abrir_ventana_auditoria():
         text="Resvisar solicitud de credenciales", 
         bootstyle="outline-primary", 
         command=lambda: (
-        ADMIN.revisar_solicitud_cambio_credenciales(),
-        messagebox.showinfo("Auditoria", "Solicitud de cambio de credenciales revisada.")
+            ADMIN.revisar_solicitud_cambio_credenciales(),
+            messagebox.showinfo("Auditoria", "Solicitud de cambio de credenciales revisada.")
         )).pack(pady=10)
-    
-    
+
+
     #boton2 Agregar Empleado (solo registro de accion)
     tb.Button(
         frame_fondo, 
         text="Agregar empleado", 
         bootstyle="outline-primary", 
-        command= lambda: (
-        ADMIN.registrar_evento("Administrador agrego un nuevo"),
-        messagebox.showinfo("Auditoria", "Nuevo empleado agregado.")
-        )).pack(pady=10)
+        command = lambda: agregar_empleado_command(lista)
+    ).pack(pady=5)
     
+    def eliminar_empleado_command():
+        # Ejemplo: elimina el primer empleado de la lista
+        if empleados_registrados:
+            comando = ComandoEliminarEmpleado(ADMIN, empleados_registrados[0])
+            comando.ejecutar()
+            messagebox.showinfo("Auditoria", "Empleado eliminado.")
+        else:
+            messagebox.showwarning("Auditoria", "No hay empleados para eliminar.")
+
     #boton3 Eliminar Empleado (solo registro de accion)
     tb.Button(
         frame_fondo, 
         text="Eliminar empleado", 
         bootstyle="outline-primary", 
-        command= lambda: (
-        ADMIN.registrar_evento("Administrador elimino un empleado"),
-        messagebox.showinfo("Auditoria", "Empleado eliminado.")
-        )).pack(pady=10)
+        command= eliminar_empleado_command
+    ).pack(pady=10)
     
+    def ver_historico_ventas_command():
+        comando = ComandoVerHistoricoVentas(ADMIN)
+        comando.ejecutar()
+        
     #boton4 Ver historico de ventas
     tb.Button(
         frame_fondo, 
         text= "Ver historico de ventas", 
         bootstyle="outline-primary", 
-        command = ver_historico_ventas
+        command = ver_historico_ventas_command
         ).pack(pady=10)
 
+def agregar_empleado_command(lista_empleados):
+    ventana_nuevo = tb.Toplevel()
+    ventana_nuevo.title("Agregar nuevo empleado")
+    ventana_nuevo.geometry("400x400")
 
+    campos = [
+        ("ID", "id"),
+        ("Nombre", "nombre"),
+        ("Apellido", "apellido"),
+        ("Correo electrónico", "correo"),
+        ("Edad", "edad"),
+        ("Ubicación", "ubicacion"),
+        ("Clave", "clave")
+    ]
+    entradas = {}
+
+    for texto, clave in campos:
+        tb.Label(ventana_nuevo, text=texto).pack(pady=5)
+        entrada = tb.Entry(ventana_nuevo)
+        entrada.pack()
+        entradas[clave] = entrada
+
+    def guardar_empleado():
+        try:
+            id_empleado = int(entradas["id"].get())
+            nombre = entradas["nombre"].get()
+            apellido = entradas["apellido"].get()
+            correo = entradas["correo"].get()
+            edad = int(entradas["edad"].get())
+            ubicacion = entradas["ubicacion"].get()
+            clave = entradas["clave"].get()
+            if not (nombre and apellido and correo and ubicacion and clave):
+                messagebox.showwarning("Campos vacíos", "Completa todos los campos.")
+                return
+        except Exception:
+            messagebox.showerror("Error", "Datos inválidos.")
+            return
+
+        nuevo_empleado = Empleado(id_empleado, nombre, apellido, correo, edad, 0, ubicacion, clave)
+        empleados_registrados.append(nuevo_empleado)
+        comando = ComandoAgregarEmpleado(ADMIN, nuevo_empleado)
+        comando.ejecutar()
+        lista_empleados.insert(tk.END, f"{nombre} {apellido} - {ubicacion}")  # Actualiza la lista visual
+        messagebox.showinfo("Auditoria", f"Empleado {nombre} agregado correctamente.")
+        ventana_nuevo.destroy()
+
+    tb.Button(ventana_nuevo, text="Guardar", command=guardar_empleado).pack(pady=20)
+    
+    
 def ver_historico_ventas():
     # Verificar si el archivo de ventas existe y leerlo
     ruta = os.path.join(os.path.dirname(_file_), "historico_ventas.txt")

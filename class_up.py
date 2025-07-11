@@ -63,16 +63,52 @@ class Administrador(Empleado):
     def revisar_solicitud_cambio_credenciales(self):
         self._registrar_evento("Administrador reviso solicitud de cambio de credenciales")
     def agregar_empleado(self, empleado: Empleado):
-        self._registrar_evento(f"Adiministrador agrego al empleado {empleado.nombre} {empleado.apellido}")
+        self.registrar_evento(f"Adiministrador agrego al empleado {empleado.nombre} {empleado.apellido}")
     def eliminar_empleado(self, empleado: Empleado):
-        self._registrar_evento(f"Administrador elimino al empleado {empleado.nombre} {empleado.apellido}")
+        self.registrar_evento(f"Administrador elimino al empleado {empleado.nombre} {empleado.apellido}")
     def ver_historico_ventas(self):
-        self._registrar_evento("Administrador consulto historico de ventas")
+        self.registrar_evento("Administrador consulto historico de ventas")
         try:
             with open("historico_ventas.txt", "r") as archivo:
                 return archivo.read()
         except FileNotFoundError:
             return "no hay registros de venta aun"
+
+
+class Comando(ABC):
+    @abstractmethod
+    def ejecutar(self):
+        pass
+    
+
+class ComandoAgregarEmpleado(Comando):
+    def __init__(self, administrador, empleado):
+        self.administrador = administrador
+        self.empleado = empleado
+
+    def ejecutar(self):
+        self.administrador.agregar_empleado(self.empleado)
+        print(f"[✔️] Empleado {self.empleado.nombre} agregado.")
+
+
+class ComandoEliminarEmpleado(Comando):
+    def __init__(self, administrador, empleado):
+        self.administrador = administrador
+        self.empleado = empleado
+
+    def ejecutar(self):
+        self.administrador.eliminar_empleado(self.empleado)
+        print(f"[✔️] Empleado {self.empleado.nombre} eliminado.")
+
+
+class ComandoVerHistoricoVentas(Comando):
+    def __init__(self, administrador):
+        self.administrador = administrador
+
+    def ejecutar(self):
+        historial = self.administrador.ver_historico_ventas()
+        print("[📜] Historial de ventas:")
+        print(historial)
 
             
 class Terminal:

@@ -1,4 +1,6 @@
 from datetime import datetime
+import csv
+from abc import ABC, abstractmethod
 
 
 
@@ -29,8 +31,7 @@ class Empleado(Persona):
     def ubicacion(self):
         return self._ubicacion        
 
-
-        
+     
 class Usuario(Persona):
     def __init__(self, cedula, nombre, apellido, correo_electronico, edad):
         super().__init__(cedula, nombre, apellido, correo_electronico, edad)
@@ -86,6 +87,7 @@ class Terminal:
     def entrada_empleado(self, empleado):
         self._empleados.append(empleado)
         print(f"Empleado {empleado.nombre} registrado en terminal {self.ubicacion}")   
+   
         
 class Transporte(Terminal):
     def __init__(self, ID_Ubicacion, ubicacion, disco:str, modelo:str, carroceria:str, chasis:str, ID_socio:int, nombre_socio:str, ID_operador:int):
@@ -106,29 +108,49 @@ class Transporte(Terminal):
 
     def tiempo_llegada(self, minutos):
         print(f"Tiempo estimado de llegada: {minutos} minutos")
+   
         
-class Frecuencia(Transporte):
-    def __init__(self, ID_Ubicacion, ubicacion, disco, modelo, carroceria, chasis, ID_socio, nombre_socio, ID_operador,  terminal_salida:str, terminal_llegada:str, horario: str):
-        super().__init__(ID_Ubicacion, ubicacion, disco, modelo, carroceria, chasis, ID_socio, nombre_socio, ID_operador)       
-        self.terminal_salida = terminal_salida
-        self.terminal_llegada = terminal_llegada
-        self.horario = horario
-        #metodos
-    def cambio_de_horario(self, nuevo_horario: str):
-        self._horario = nuevo_horario
-        print(f"Horario actualizado a: {nuevo_horario}")    
+class Frecuencia:
+    def __init__(self, origen, destino, hora_salida, bus_asignado):
+        self.origen = origen
+        self.destino = destino
+        self._hora_salida = hora_salida
+        self.bus_asignado = bus_asignado
+        self.observadores = []
+
+    def agregar_observador(self, observador):
+        self.observadores.append(observador)
+
+    def quitar_observador(self, observador):
+        self.observadores.remove(observador)
+
+    def notificar_observadores(self, mensaje):
+        for observador in self.observadores:
+            observador.actualizar(mensaje)
+
+    @property
+    def hora_salida(self):
+        return self._hora_salida
+
+    @hora_salida.setter
+    def hora_salida(self, nueva_hora):
+        if nueva_hora != self._hora_salida:
+            mensaje = f"La hora de salida ha cambiado de {self._hora_salida} a {nueva_hora}"
+            self._hora_salida = nueva_hora
+            self.notificar_observadores(mensaje)
         
-class Operadores(Empleado):
-    def __init__(self, cedula, nombre, apellido, correo_electronico, edad, ID_Empleado, ubicacion, tipo_empleado:str, puntos_licencia:int):
-        super().__init__(cedula, nombre, apellido, correo_electronico, edad, ID_Empleado, ubicacion)      
-        self.tipo_empleado = tipo_empleado
+        
+class OperadorBus(Persona):
+    def __init__(self, cedula, nombre, apellido, correo_electronico, edad, puntos_licencia, esta_apto, id, clave=""):
+        super().__init__(cedula, nombre, apellido, correo_electronico, edad, clave)
         self.puntos_licencia = puntos_licencia
-        #metodos
-    def cambio_unidad(self, nueva_unidad: str):
-        print(f"Operador {self.nombre} ha cambiado a la unidad {nueva_unidad}") 
-        #polimorfismo 
-    def mostrar_info(self):
-        print(f"Operador: {self.nombre} ({self.tipo_empleado}), Puntos licencia: {self.puntos_licencia}")  
+        self.esta_apto = esta_apto
+        self.id = id
+
+    @property
+    def sacar_datos(self):
+        return self.nombre 
+     
         
 class Boleto(Usuario):
     def __init__(self, cedula, nombre, apellido, correo_electronico, edad,
@@ -158,17 +180,77 @@ class GestorDePagos(Boleto):
 def procesamiento_de_transaccion(self, gestor_pago:GestorDePagos):
     self.cifrado_de_pago()
 
+
+class Reporte:
+    def __init__(self, bus, operador, descripcion, fecha=None):
+        self.bus = bus                # Objeto Bus
+        self.operador = operador      # Objeto OperadorBus
+        self.descripcion = descripcion
+        self.fecha = fecha or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    def guardar_en_csv(self, ruta_archivo):
+        # Guardar o agregar reporte al CSV
+        with open(ruta_archivo, mode='a', newline='', encoding='utf-8') as archivo:
+            escritor = csv.writer(archivo)
+            # Si el archivo está vacío, escribir encabezados
+            archivo.seek(0, 2)  # Ir al final del archivo
+            if archivo.tell() == 0:
+                escritor.writerow(["bus_numero_disco", "bus_placa", "operador_nombre", "descripcion", "fecha"])
+            escritor.writerow([
+                self.bus.numero_disco,
+                self.bus.placa,
+                self.operador.nombre,
+                self.descripcion,
+                self.fecha
+            ])
+
+    @staticmethod
+    def cargar_reportes_desde_csv(ruta_archivo):
+        reportes = []
+        try:
+            with open(ruta_archivo, newline='', encoding='utf-8') as archivo:
+                lector = csv.DictReader(archivo)
+                for fila in lector:
+                    reportes.append(fila)
+        except FileNotFoundError:
+            print("No existe el archivo de reportes.")
+        return reportes
+
+
+class EstadoDescuento(ABC):
+    @abstractmethod
+    def aplicar_descuento(self, monto: float) -> float:
+        pass
+
+class SinDescuento(EstadoDescuento):
+    def aplicar_descuento(self, monto: float) -> float:
+        return monto
+
+class GrupoPrioritario(EstadoDescuento):
+    def aplicar_descuento(self, monto: float) -> float:
+        return monto * 0.5  # 50% de descuento
+
+class Pago:
+    def __init__(self, metodo, monto, cliente):
+        self.metodo = metodo  # "efectivo", "tarjeta"
+        self.monto = monto
+        self.cliente = cliente
+
+        # asignar estado descuento según cliente.grupo_prioritario
+        if getattr(cliente, 'grupo_prioritario', False):
+            self.estado_descuento = GrupoPrioritario()
+        else:
+            self.estado_descuento = SinDescuento()
+
+    def calcular_monto_final(self):
+        return self.estado_descuento.aplicar_descuento(self.monto)
+
+
+
 #Inyeccion de dependencia 
 class ServicioCifrado:
     def cifrar(self):
         print("Informacion cifrada correctamente.")
-
-class PasarelaDePagos:
-    def __init__(self, ID_pasarela: int, tasa_comision: float, fecha_configuracion: str, cifrador= None):
-        self.ID_pasarela = ID_pasarela
-        self.tasa_comision = tasa_comision
-        self.fecha_configuracion = fecha_configuracion
-        self._cifrador = cifrador or ServicioCifrado()
 
 
     def procesamiento_de_transaccion(self, gestor_pago: GestorDePagos):

@@ -554,7 +554,7 @@ def abrir_ventana_auditoria(lista):
 def agregar_empleado_command(lista_empleados):
     ventana_nuevo = tb.Toplevel()
     ventana_nuevo.title("Agregar nuevo empleado")
-    ventana_nuevo.geometry("400x400")
+    ventana_nuevo.geometry("600x600")
 
     campos = [
         ("ID", "id"),

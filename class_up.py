@@ -74,6 +74,7 @@ class Administrador(Empleado):
         except FileNotFoundError:
             return "no hay registros de venta aun"
 
+#Patron Command
 
 class Comando(ABC):
     @abstractmethod
@@ -296,3 +297,9 @@ class ServicioCifrado:
         print(f"💳 Procesando transacción para {gestor_pago.nombre}.\n"
               f"Monto: ${gestor_pago.monto}, Comisión: ${comision:.2f}, Total: ${total:.2f}")
        
+
+
+
+
+
+

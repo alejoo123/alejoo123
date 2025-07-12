@@ -1,3 +1,7 @@
 [2025-07-11 08:35:30] Adiministrador agrego al empleado Robert Garcia
 [2025-07-11 08:49:29] Adiministrador agrego al empleado Robert Garcia
 [2025-07-11 09:04:51] Adiministrador agrego al empleado Elkin Delgado
+[2025-07-11 10:44:09] Administrador consulto historico de ventas
+[2025-07-11 10:44:15] Administrador elimino al empleado Robert Garcia
+[2025-07-11 10:44:19] Administrador consulto historico de ventas
+[2025-07-11 10:55:05] Adiministrador agrego al empleado Jork Lucas

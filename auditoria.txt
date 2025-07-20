@@ -5,3 +5,4 @@
 [2025-07-11 10:44:15] Administrador elimino al empleado Robert Garcia
 [2025-07-11 10:44:19] Administrador consulto historico de ventas
 [2025-07-11 10:55:05] Adiministrador agrego al empleado Jork Lucas
+[2025-07-17 19:01:39] Adiministrador agrego al empleado tyrone zambrano

@@ -1,5 +1,9 @@
 import ttkbootstrap as tb
 from ttkbootstrap.constants import *
+from ttkbootstrap.style import Bootstyle
+from ttkbootstrap.tableview import Tableview
+from ttkbootstrap.toast import ToastNotification
+from ttkbootstrap.dialogs import Messagebox
 import re
 import os
 import smtplib
@@ -23,11 +27,11 @@ from class_up import ComandoAgregarEmpleado, ComandoEliminarEmpleado, ComandoVer
 empleado_en_sesion = None
 #empleados registrados
 empleados_registrados = [
-    Empleado(1, "Robert", "Garcia", "rg4867965@gmail.com", 20, 2004, "San Jacinto", "1234"),
+    Empleado(1, "Robert", "Garcia", "rg4867965@gmail.com", 20, 2004, "Manta", "1234"),
     Empleado(2, "Andy", "Garcia", "andy@mail.com", 19, 2005, "Manta", "1234"),
 ]
 #Administrador registrado
-ADMIN = Administrador(1, "Jhonny", "Perez", "rg4867965@gmail.com", 19, 1001, "Guayaquil", 5001, "Av. Principal", "1234")
+ADMIN = Administrador(1, "Jhonny", "Perez", "rg4867965@gmail.com", 19, 1001, "Manta", 5001, "Av. Principal", "1234")
 #Transportes disponibles
 transportes_disponibles = [
     {
@@ -71,9 +75,27 @@ transportes_disponibles = [
         "ubicacion_terminal": "Andén 4"
     }
 ]
-
-
-
+# Precios por ciudad
+# Diccionario que contiene los precios por ciudad
+CIUDADES_PRECIOS = {
+    "Bahía de Caráquez": {"precio": 5.50, "tiempo": "45 min"},
+    "Portoviejo": {"precio": 3.50, "tiempo": "30 min"},
+    "Chone": {"precio": 4.75, "tiempo": "1h 10min"},
+    "Pedernales": {"precio": 6.25, "tiempo": "1h 30min"},
+    "Jipijapa": {"precio": 3.25, "tiempo": "50 min"},
+    "Montecristi": {"precio": 3.75, "tiempo": "40 min"},
+    "San Jacinto": {"precio": 2.50, "tiempo": "20 min"}
+}
+MODERN_STYLE = {
+    "primary": "#4e73df",
+    "secondary": "#858796",
+    "success": "#1cc88a",
+    "info": "#36b9cc",
+    "warning": "#f6c23e",
+    "danger": "#e74a3b",
+    "light": "#f8f9fc",
+    "dark": "#5a5c69"
+}
 
 
 
@@ -639,125 +661,283 @@ def ver_historico_ventas():
 
 
 def interfaz_empleado(ventana_sesion_empleado):
-    ventana_sesion_empleado.withdraw()  # Oculta la ventana de login del empleado
-    # Crea una nueva ventana para el panel de empleado
-    ventana_empleado= tb.Toplevel()
-    ventana_empleado.title("Panel de empleado")
-    ventana_empleado.geometry("1500x650")
-    frame_fondo = tb.Frame(ventana_empleado, bootstyle="light")
-    frame_fondo.pack(fill="both", expand=True) 
+    ventana_sesion_empleado.withdraw()
+    
+    # Ventana principal
+    ventana_empleado = tb.Window(title=f"Bienvenido/a {empleado_en_sesion.nombre}", themename="litera")
+    ventana_empleado.geometry("1200x700+100+50")
+    ventana_empleado.resizable(False, False)
+    
+    # Configurar estilo moderno
+    style = tb.Style()
+    style.configure('primary.TButton', font=('Helvetica', 10, 'bold'))
+    style.configure('success.TButton', font=('Helvetica', 10, 'bold'))
+    style.configure('TCombobox', font=('Helvetica', 10))
+    
+    # Frame principal
+    main_frame = tb.Frame(ventana_empleado, bootstyle="light")
+    main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+    
+    # Header
+    header_frame = tb.Frame(main_frame)
+    header_frame.pack(fill="x", pady=(0, 20))
     
     tb.Label(
-        frame_fondo,
-        text=f"👨‍💼 Bienvenido {empleado_en_sesion.nombre} {empleado_en_sesion.apellido}",
-        font=("Helvetica", 14, "bold"),
-        bootstyle="success",  # Estilo del texto
-    ).pack(pady=15)
-
-
+        header_frame,
+        text=f"🚌 Terminal de Buses - {empleado_en_sesion.ubicacion}",
+        font=("Helvetica", 16, "bold"),
+        bootstyle="primary"
+    ).pack(side="left")
+    
+    tb.Button(
+        header_frame,
+        text="Cerrar Sesión",
+        bootstyle="danger-outline",
+        command=ventana_empleado.destroy
+    ).pack(side="right")
+    
+    # Contenedor de dos columnas
+    content_frame = tb.Frame(main_frame)
+    content_frame.pack(fill="both", expand=True)
+    
+    # Columna izquierda (Formulario)
+    form_frame = tb.Frame(content_frame, width=400, bootstyle="light")
+    form_frame.pack(side="left", fill="y", padx=(0, 20))
+    
+    # Card de selección
+    form_card = tb.Frame(form_frame, bootstyle="light", padding=20)
+    form_card.pack(fill="both", expand=True)
+    
     tb.Label(
-        frame_fondo,
-        text="Seleccione hora de salida",
-        font=("Helvetica", 12, "bold"),
-        bootstyle="primary",  # Estilo del texto
-    ).pack(pady=10)
-
-    contendor_horas = tb.Frame(frame_fondo, bootstyle="light")
-    # Contenedor para los botones de horas
-    contendor_horas.pack(pady=10)
-    horas_disponibles=["5:00", "6:00", "7:00", "8:00", "9:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00"]
-    # Función para seleccionar la hora y generar el boleto
-    direcciones = [
-        "Bahia", "Portoviejo", "chone", "Pedernales", "Bahia", "Portoviejo", "chone", "Pedernales",
-        "Bahia", "Portoviejo", "chone", "Pedernales", "Bahia", "Portoviejo", "chone", "Pedernales", "Bahia"
-    ]
-
-    def seleccionar_hora(hora, direccion, ventana_empleado):
-        ventana_empleado.withdraw()  # Oculta la ventana de emplea
-        ventana_boleto = tb.Toplevel()
-        ventana_boleto.title("Generar boleto")
-        ventana_boleto.geometry("1000x500")
-        frame_fondo_boleto = tb.Frame(ventana_boleto, bootstyle="light")
-        frame_fondo_boleto.pack(fill="both", expand=True)
-
-        bus_seleccionado= random.choice(transportes_disponibles)
-
-        tb.Label (
-            frame_fondo_boleto,
-            text=f"Hora seleccionada: {hora}\nDireccion:{direccion}",
-            font=("helvetica", 14, "bold"),
-            bootstyle="info"  # Estilo del texto
-        ).pack(pady=10)
-
-        tb.Label(
-            frame_fondo_boleto,
-            text=f"Transporte asignado:",
-            font=("helvetica", 12, "bold"),
-            bootstyle="success"
-        ).pack()
-
-        atributos = (
-            f"• Nombre: {bus_seleccionado['nombre']}",
-            f"• Compañia: {bus_seleccionado['compañia']}",
-            f"• Ubicación: {bus_seleccionado['ubicacion']}",
-            f"• Disco: {bus_seleccionado['disco']}",
-            f"• Modelo: {bus_seleccionado['modelo']}",
-            f"• Carrocería: {bus_seleccionado['carroceria']}",
-            f"• Chasis: {bus_seleccionado['chasis']}",
-            f"• Ubicación en terminal: {bus_seleccionado['ubicacion_terminal']}"
-        )
-
-        for texto in atributos:
-            tb.Label(
-                frame_fondo_boleto,
-                text=texto,
-                font = ("Helvetica", 11),
-                bootstyle="secondary"
-            ).pack(pady=2)
-
-        def generar_boleto():
-            messagebox.showinfo("Boleto", "Boleto Generado")
-
-
-        tb.Button(
-            frame_fondo_boleto,
-            text="Generar Boleto",
-            bootstyle="outline-primary",  # Estilo del botón
-            # Comando para generar el boleto
-            width=18,
-            padding=10,
-            command=generar_boleto
-        ).pack(pady=20)
-        
-        # Cuando se cierre la ventana de boleto, mostrar la ventana de empleado otra vez
-        def al_cerrar():
-            ventana_empleado.deiconify()
-            ventana_boleto.destroy()
-        ventana_boleto.protocol("WM_DELETE_WINDOW", al_cerrar)
-        
-    columnas = 4    
-    #botones de hora
-    for i, (hora, direccion) in enumerate(zip(horas_disponibles, direcciones)):
-        fila = (i // columnas) * 2  # Cada hora ocupa dos filas (botón y dirección)
-        columna = i % columnas
-
-        # Botón de hora
-        tb.Button(
-            contendor_horas,
+        form_card,
+        text="Generar Nuevo Boleto",
+        font=("Helvetica", 14, "bold"),
+        bootstyle="primary"
+    ).pack(pady=(0, 20))
+    
+    # Selección de destino
+    tb.Label(
+        form_card,
+        text="Ciudad Destino:",
+        font=("Helvetica", 10),
+        bootstyle="secondary"
+    ).pack(anchor="w", pady=(10, 5))
+    
+    destino_combo = tb.Combobox(
+        form_card,
+        values=list(CIUDADES_PRECIOS.keys()),
+        state="readonly",
+        font=("Helvetica", 10),
+        bootstyle="primary"
+    )
+    destino_combo.pack(fill="x", pady=(0, 15))
+    destino_combo.current(0)
+    
+    # Info del destino seleccionado
+    destino_info = tb.Label(
+        form_card,
+        text=f"Precio: ${CIUDADES_PRECIOS[list(CIUDADES_PRECIOS.keys())[0]]['precio']} • Tiempo: {CIUDADES_PRECIOS[list(CIUDADES_PRECIOS.keys())[0]]['tiempo']}",
+        font=("Helvetica", 9),
+        bootstyle="info"
+    )
+    destino_info.pack(anchor="w", pady=(0, 20))
+    
+    # Actualizar info cuando cambia la selección
+    def update_destino_info(event):
+        ciudad = destino_combo.get()
+        info = CIUDADES_PRECIOS[ciudad]
+        destino_info.config(text=f"Precio: ${info['precio']} • Tiempo: {info['tiempo']}")
+    
+    destino_combo.bind("<<ComboboxSelected>>", update_destino_info)
+    
+    # Selección de hora
+    tb.Label(
+        form_card,
+        text="Hora de Salida:",
+        font=("Helvetica", 10),
+        bootstyle="secondary"
+    ).pack(anchor="w", pady=(10, 5))
+    
+    horas_frame = tb.Frame(form_card)
+    horas_frame.pack(fill="x")
+    
+    horas_disponibles = ["05:00", "07:00", "09:00", "11:00", "13:00", "15:00", "17:00", "19:00", "21:00"]
+    for i, hora in enumerate(horas_disponibles):
+        btn = tb.Button(
+            horas_frame,
             text=hora,
-            width=20,
-            bootstyle="outline-primary",
-            command=lambda h=hora, d=direccion: seleccionar_hora(h, d, ventana_empleado)
-        ).grid(row=fila, column=columna, padx=10, pady=(10, 0))
-
-        # Label de dirección debajo del botón
+            width=6,
+            bootstyle="outline-primary" if i != 0 else "primary",
+            command=lambda h=hora: generar_boleto_preview(h)
+        )
+        btn.pack(side="left", padx=5, pady=5)
+    
+    # Columna derecha (Preview y acciones)
+    preview_frame = tb.Frame(content_frame, bootstyle="light")
+    preview_frame.pack(side="right", fill="both", expand=True)
+    
+    # Card de preview
+    preview_card = tb.Frame(preview_frame, bootstyle="light", padding=20)
+    preview_card.pack(fill="both", expand=True)
+    
+    tb.Label(
+        preview_card,
+        text="Resumen del Boleto",
+        font=("Helvetica", 14, "bold"),
+        bootstyle="primary"
+    ).pack(pady=(0, 20))
+    
+    # Contenedor del preview
+    boleto_preview = tb.Frame(preview_card, bootstyle="light", relief="solid", borderwidth=1)
+    boleto_preview.pack(fill="both", expand=True, pady=(0, 20))
+    
+    # Botón de confirmación (CREADO UNA SOLA VEZ)
+    confirm_btn = tb.Button(
+        preview_card,
+        text="Confirmar y Generar Boleto",
+        bootstyle="success",
+        width=25,
+        state="disabled"
+    )
+    confirm_btn.pack(pady=10)
+    
+    # Función para generar el preview
+    def generar_boleto_preview(hora_seleccionada):
+        # Limpiar el preview anterior
+        for widget in boleto_preview.winfo_children():
+            widget.destroy()
+        
+        ciudad = destino_combo.get()
+        if not ciudad:
+            Messagebox.show_warning("Seleccione un destino", "Advertencia")
+            return
+            
+        bus = random.choice(transportes_disponibles)
+        precio = CIUDADES_PRECIOS[ciudad]["precio"]
+        tiempo = CIUDADES_PRECIOS[ciudad]["tiempo"]
+        
+        # Header del boleto
+        header = tb.Frame(boleto_preview, bootstyle="primary")
+        header.pack(fill="x", pady=(10, 15), padx=10)
+        
         tb.Label(
-            contendor_horas,
-            text=f"Dirección: {direccion}",
-            font=("Arial", 9),
-            bootstyle="info"
-        ).grid(row=fila + 1, column=columna, padx=10, pady=(0, 10))
-
+            header,
+            text="BOLETO DE VIAJE",
+            font=("Helvetica", 12, "bold"),
+            bootstyle="inverse-primary"
+        ).pack(pady=5)
+        
+        # Cuerpo del boleto
+        body = tb.Frame(boleto_preview)
+        body.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        # Datos del viaje
+        viaje_frame = tb.Frame(body)
+        viaje_frame.pack(fill="x", pady=5)
+        
+        tb.Label(
+            viaje_frame,
+            text="🚍 Viaje:",
+            font=("Helvetica", 10, "bold"),
+            bootstyle="dark"
+        ).pack(side="left", anchor="w")
+        
+        tb.Label(
+            viaje_frame,
+            text=f"{empleado_en_sesion.ubicacion} → {ciudad}",
+            font=("Helvetica", 10),
+            bootstyle="secondary"
+        ).pack(side="left", padx=10)
+        
+        # Hora y fecha
+        hora_frame = tb.Frame(body)
+        hora_frame.pack(fill="x", pady=5)
+        
+        tb.Label(
+            hora_frame,
+            text="🕒 Hora:",
+            font=("Helvetica", 10, "bold"),
+            bootstyle="dark"
+        ).pack(side="left", anchor="w")
+        
+        tb.Label(
+            hora_frame,
+            text=f"{hora_seleccionada} • {datetime.now().strftime('%d/%m/%Y')}",
+            font=("Helvetica", 10),
+            bootstyle="secondary"
+        ).pack(side="left", padx=10)
+        
+        # Precio
+        precio_frame = tb.Frame(body)
+        precio_frame.pack(fill="x", pady=5)
+        
+        tb.Label(
+            precio_frame,
+            text="💵 Precio:",
+            font=("Helvetica", 10, "bold"),
+            bootstyle="dark"
+        ).pack(side="left", anchor="w")
+        
+        tb.Label(
+            precio_frame,
+            text=f"${precio:.2f} • Tiempo estimado: {tiempo}",
+            font=("Helvetica", 10),
+            bootstyle="secondary"
+        ).pack(side="left", padx=10)
+        
+        # Datos del bus
+        bus_frame = tb.Frame(body)
+        bus_frame.pack(fill="x", pady=5)
+        
+        tb.Label(
+            bus_frame,
+            text="🚌 Transporte:",
+            font=("Helvetica", 10, "bold"),
+            bootstyle="dark"
+        ).pack(side="left", anchor="w")
+        
+        tb.Label(
+            bus_frame,
+            text=f"{bus['nombre']} • Disco: {bus['disco']}",
+            font=("Helvetica", 10),
+            bootstyle="secondary"
+        ).pack(side="left", padx=10)
+        
+        # Habilitar y actualizar el botón de confirmación
+        confirm_btn.config(
+            command=lambda: confirmar_boleto(ciudad, hora_seleccionada, precio, bus),
+            state="normal"
+        )
+    
+    # Función para confirmar el boleto
+    def confirmar_boleto(ciudad, hora, precio, bus):
+        # Registrar la transacción
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        registro = (
+            f"[{timestamp}] Pasajero: {empleado_en_sesion.nombre} {empleado_en_sesion.apellido} | "
+            f"Destino: {ciudad} | Hora: {hora} | Bus: {bus['disco']} | "
+            f"Precio: ${precio:.2f}\n"
+        )
+        
+        with open("historico_ventas.txt", "a") as f:
+            f.write(registro)
+        
+        # Mostrar notificación
+        toast = ToastNotification(
+            title="Boleto Generado",
+            message=f"Boleto para {ciudad} a las {hora} generado correctamente!",
+            duration=3000,
+            bootstyle="success"
+        )
+        toast.show_toast()
+        
+        # Actualizar vista
+        generar_boleto_preview(hora)
+    
+    # Inicializar con un preview por defecto
+    generar_boleto_preview(horas_disponibles[0])
+    
+    ventana_empleado.mainloop()
 
 
 

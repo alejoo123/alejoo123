@@ -6,6 +6,7 @@ from ttkbootstrap.toast import ToastNotification
 from ttkbootstrap.dialogs import Messagebox
 import re
 import os
+from conexion_db import verificar_usuario_en_bd
 import smtplib
 import random
 from email.mime.text import MIMEText
@@ -25,13 +26,7 @@ from class_up import ComandoAgregarEmpleado, ComandoEliminarEmpleado, ComandoVer
 # None se asigna al iniciar sesion, Luego se asigna al iniciar sesion
 #Se usa para veriicar si un empleado esta en sesion o no
 empleado_en_sesion = None
-#empleados registrados
-empleados_registrados = [
-    Empleado(1, "Robert", "Garcia", "rg4867965@gmail.com", 20, 2004, "Manta", "1234"),
-    Empleado(2, "Andy", "Garcia", "andy@mail.com", 19, 2005, "Manta", "1234"),
-]
-#Administrador registrado
-ADMIN = Administrador(1, "Jhonny", "Perez", "rg4867965@gmail.com", 19, 1001, "Manta", 5001, "Av. Principal", "1234")
+
 #Transportes disponibles
 transportes_disponibles = [
     {
@@ -97,7 +92,24 @@ MODERN_STYLE = {
     "dark": "#5a5c69"
 }
 
+def verificar_estructura_tabla():
+    conn = obtener_conexion()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'usuarios'
+            ORDER BY ordinal_position
+        """)
+        columnas = cursor.fetchall()
+        print("Estructura de la tabla usuarios:")
+        for col in columnas:
+            print(f"{col[0]} ({col[1]})")
+    finally:
+        conn.close()
 
+verificar_estructura_tabla()
 
 
 
@@ -106,22 +118,35 @@ MODERN_STYLE = {
 
     
 def verificar_credenciales(usuario, clave, ventana_login):
-    if (usuario.lower() == ADMIN.nombre.lower() or usuario.lower() == ADMIN.correo_electronico.lower()) and clave == ADMIN.clave:
-        messagebox.showinfo("Acceso concedido", "✅ Ingresaste como administrador. ---->")
-        interfaz_admin(ventana_login)  # Llama la siguiente ventana luego de verificar credenciales
+    datos_usuario = verificar_usuario_en_bd(usuario, clave)
+    if datos_usuario and datos_usuario["rol"] == "admin":
+        global ADMIN
+        ADMIN = Empleado(
+            cedula=datos_usuario["id"],
+            nombre=datos_usuario["nombre"],
+            apellido=datos_usuario["apellido"],
+            correo_electronico=datos_usuario["correo"],
+            edad=0,  # Valor por defecto
+            codigo=0,  # Valor por defecto
+            ubicacion="Oficina",  # Valor por defecto
+            clave=datos_usuario["clave"]
+        )
+        messagebox.showinfo("Acceso concedido", "✅ Ingresaste como administrador.")
+        interfaz_admin(ventana_login)
     else:
-        messagebox.showinfo("Acceso denegado", "❌ Credenciales incorrectas.")
+        messagebox.showerror("Error", "❌ Credenciales incorrectas o no eres administrador.")
 
         
-def verificar_credenciales_empe(usuario, clave, ventana_sesion_empleado):
-    for emp in empleados_registrados:
-        if (emp.nombre.lower() == usuario.lower() or emp.correo_electronico.lower() == usuario.lower()) and emp.clave == clave:
-            global empleado_en_sesion
-            empleado_en_sesion = emp
-            messagebox.showinfo("Acceso concedido", "✅ Ingresaste como empleado. ---->")
-            interfaz_empleado(ventana_sesion_empleado)
-            return
-    messagebox.showinfo("Acceso denegado", "❌ Credenciales Incorrectas.")
+def verificar_credenciales_empe(usuario, clave, ventana_empleado):
+    datos_usuario = verificar_usuario_en_bd(usuario, clave)
+    if datos_usuario and datos_usuario["rol"] == "empleado":
+        global empleado_en_sesion
+        empleado_en_sesion = Empleado(0, datos_usuario["nombre"], datos_usuario["apellido"],
+                                      datos_usuario["correo"], 0, 0, "Terminal", clave)
+        messagebox.showinfo("Acceso concedido", "✅ Ingresaste como empleado.")
+        interfaz_empleado(ventana_empleado)
+    else:
+        messagebox.showerror("Error", "❌ Credenciales incorrectas o no eres empleado.")
 
 
 
@@ -129,77 +154,119 @@ def verificar_credenciales_empe(usuario, clave, ventana_sesion_empleado):
 
 
 def interfaz_admin(ventana_login):
-    print("Entrando a interfaz_admin") # depuracion
-    ventana_login.withdraw()  # Oculta la ventana de login del administrador
-    # Crea una nueva ventana para el panel de administrador
-    ventana_admin = tb.Toplevel()
-    ventana_admin.title("Panel de Administrador")
-    ventana_admin.geometry("700x600")
-    frame_fondo = tb.Frame(ventana_admin, bootstyle="light")
-    frame_fondo.pack(fill="both", expand=True)
     
-    def al_cerrar():
-        ventana_login.deiconify()
-        ventana_admin.destroy()
-    ventana_admin.protocol("WM_DELETE_WINDOW", al_cerrar)
+    ventana_login.withdraw()
     
-    # Etiqueta de título
-    tb.Label(
-        frame_fondo,
-        text="Panel de Control del Administrador 👨‍💼",
-        font=("Helvetica", 14, "bold"),
-        bootstyle = "success",  # Estilo del texto
-    ).pack(pady=15)
-
-    # se ve el nombre del administrador de titulo
-    tb.Label(
-        frame_fondo, 
-        text=f"👤 Administrador: {ADMIN.nombre} {ADMIN.apellido}",
-        font=("Arial", 12, "bold"), 
-        bootstyle = "info",  # Estilo del texto
-        ).pack(pady=10)
-
-    tb.Label(
-        frame_fondo, 
-        text="📋 Lista de empleados registrados:", 
-        font=("Arial", 11), 
-        bootstyle = "primary"  # Estilo del texto
-        ).pack()
-
-    lista = tk.Listbox(frame_fondo, width=50)
-    lista.pack(pady=10)
-
-    for emp in empleados_registrados:
-        lista.insert(tk.END, f"{emp.nombre} {emp.apellido} - {emp.ubicacion}")
+    ventana_admin = tb.Window(title="Panel de Administrador", themename="litera")
+    ventana_admin.geometry("1200x800")
+    
+    # Frame principal
+    main_frame = tb.Frame(ventana_admin)
+    main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+    
+    # Lista de empleados
+    empleados = Empleado.get_all()
+    
+    # Tabla de empleados
+    columns = [
+        {"text": "Cédula", "stretch": False},
+        {"text": "Nombre"},
+        {"text": "Apellido"},
+        {"text": "Ubicación"},
+        {"text": "Código", "stretch": False},
+        {"text": "Acciones", "stretch": False}
+    ]
+    
+    rowdata = [
+        (
+            emp._cedula,
+            emp.nombre,
+            emp.apellido,
+            emp._ubicacion,
+            emp.codigo,
+            f"Eliminar|Editar"
+        ) for emp in empleados
+    ]
+    
+    table = Tableview(
+        master=main_frame,
+        coldata=columns,
+        rowdata=rowdata,
+        paginated=True,
+        searchable=True,
+        bootstyle="primary"
+    )
+    table.pack(fill="both", expand=True, pady=10)
+    
+    # Botones de acción
+    btn_frame = tb.Frame(main_frame)
+    btn_frame.pack(fill="x", pady=10)
+    
+    btn_agregar = tb.Button(
+        btn_frame,
+        text="Agregar Empleado",
+        bootstyle="success",
+        command=lambda: abrir_formulario_empleado()
+    )
+    btn_agregar.pack(side="left", padx=5)
+    
+    btn_ventas = tb.Button(
+        btn_frame,
+        text="Ver Histórico Ventas",
+        bootstyle="info",
+        command=lambda: ComandoVerHistoricoVentas(ADMIN).ejecutar()
+    )
+    btn_ventas.pack(side="left", padx=5)
+    
+    def abrir_formulario_empleado():
+        form = tb.Toplevel(title="Nuevo Empleado")
+        form.geometry("500x600")
         
-
-    # Boton para cambiar credenciales
-    tb.Button(
-        frame_fondo,
-        text="Cambiar Credenciales",
-        width=25,
-        bootstyle = "outline-primary",  # Estilo del botón
-        command = cambiar_credenciales_admin
-    ).pack(pady=5)
-    
-    tb.Button(
-        frame_fondo,
-        text="Auditoria",
-        width=25,
-        bootstyle = "outline-primary",
-        command = lambda: abrir_ventana_auditoria(lista) 
-).pack(pady=5)
-
-
-    # Botón para cerrar sesión
-    tb.Button(
-        frame_fondo,
-        text="Cerrar Sesión",
-        width=25,
-        bootstyle="outline-danger",  # Botón rojo para cerrar sesión
-        command=ventana_admin.destroy # Cierra la ventana del administrador y vuelve al login
-    ).pack(pady=20)
-
+        # Definimos los campos con nombres que coincidan con la base de datos
+        campos = [
+        ("Cédula", "cedula"),
+        ("Nombre", "nombre"), 
+        ("Apellido", "apellido"),
+        ("Correo electrónico", "correo"),  # Usamos 'correo' que es más simple
+        ("Edad", "edad"),
+        ("Código", "codigo"),
+        ("Ubicación", "ubicacion"),
+        ("Clave", "clave")
+    ]
+        
+        entries = {}
+        for text, field in campos:
+            frame = tb.Frame(form)
+            frame.pack(fill="x", padx=10, pady=5)
+            tb.Label(frame, text=text).pack(side="left")
+            entry = tb.Entry(frame)
+            entry.pack(side="right", fill="x", expand=True)
+            entries[field] = entry
+        
+        def guardar():
+            data = {k: v.get() for k, v in entries.items()}
+            # Convertimos la edad a número
+            try:
+                data['edad'] = int(data['edad'])
+            except ValueError:
+                Messagebox.show_error("La edad debe ser un número", "Error")
+                return
+            
+            comando = ComandoAgregarEmpleado(ADMIN, data)
+            success, msg = comando.ejecutar()
+            
+            if success:
+                Messagebox.show_info(msg, "Éxito")
+                form.destroy()
+                # Refrescamos la interfaz
+                ventana_admin.destroy()
+                interfaz_admin(ventana_login)
+            else:
+                Messagebox.show_error(msg, "Error")
+        
+        tb.Button(form, text="Guardar", command=guardar).pack(pady=20)
+    ventana_admin.mainloop()
+        
         
 def abrir_login_admin():
     ventana_login = tb.Toplevel()
@@ -512,6 +579,7 @@ def cambiar_credenciales_admin():
 
     
 def abrir_ventana_auditoria(lista):
+    
     ventana_auditoria = tb.Toplevel()
     ventana_auditoria.title("Auditoria")
     ventana_auditoria.geometry("400x400")

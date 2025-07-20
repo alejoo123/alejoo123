@@ -1,8 +1,64 @@
 from datetime import datetime
 import csv
 from abc import ABC, abstractmethod
+import os
+import psycopg2
+from dotenv import load_dotenv
+from psycopg2 import sql, extras
+from ttkbootstrap.tableview import Tableview
+import ttkbootstrap as tb
+from conexion_db import obtener_conexion
+
+# Cargar las variables de entorno desde el archivo .env
+load_dotenv()
 
 
+class Database:
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._connect()
+        return cls._instance
+    
+    def _connect(self):
+        try:
+            self.conn = psycopg2.connect(
+            host="localhost",
+            port=5432,
+            dbname="terminal_terrestre",  
+            user="postgres",        
+            password="RgLd28818"         
+            )
+            self.conn.autocommit = False
+        except Exception as e:
+            raise ConnectionError(f"Error al conectar a PostgreSQL: {e}")
+    
+    def get_cursor(self):
+        return self.conn.cursor(cursor_factory=extras.DictCursor)
+    
+    def close(self):
+        if self.conn:
+            self.conn.close()
+            self._instance = None
+    
+    def execute_query(self, query, params=None, fetch=False):
+        cursor = self.get_cursor()
+        try:
+            cursor.execute(query, params or ())
+            if fetch:
+                return cursor.fetchall()
+            self.conn.commit()
+            return True
+        except Exception as e:
+            self.conn.rollback()
+            raise e
+        finally:
+            cursor.close()
+
+# Singleton para la conexión
+db = Database()
 
 
 class Persona:
@@ -23,14 +79,79 @@ class Persona:
         
         
 class Empleado(Persona):
-    def __init__(self, cedula, nombre, apellido, correo_electronico, edad, codigo, ubicacion, clave):
-        super().__init__(cedula, nombre, apellido, correo_electronico, edad, clave)
-        self.codigo = codigo
-        self._ubicacion = ubicacion
+    
+    def __init__(self, cedula, nombre, apellido, correo_electronico=None, correo=None, edad=0, codigo=0, ubicacion="Terminal", clave=""):
+            # Permite ambos nombres: 'correo_electronico' o 'correo'
+            correo_final = correo_electronico if correo_electronico is not None else correo
+            if correo_final is None:
+                raise ValueError("Se requiere un correo electrónico")
+                
+            super().__init__(cedula, nombre, apellido, correo_final, edad, clave)
+            self.codigo = codigo
+            self._ubicacion = ubicacion
+            self.registrar_evento(f"Empleado creado: {self.nombre}")
+        
     @property
     def ubicacion(self):
-        return self._ubicacion        
-
+        return self._ubicacion
+        
+    def registrar_evento(self, mensaje: str):
+        """Método para registrar eventos de auditoría"""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S") 
+        linea = f"[{timestamp}] {mensaje}\n"
+        with open("auditoria.txt", "a") as archivo:
+            archivo.write(linea)
+    
+    @staticmethod
+    def get_all():
+        from conexion_db import obtener_conexion
+        conn = obtener_conexion()
+        cursor = conn.cursor()
+        cursor.execute("SELECT cedula, nombre, apellido, correo, edad, codigo, ubicacion, clave FROM usuarios WHERE rol = 'empleado'")
+        empleados = []
+        for row in cursor.fetchall():
+            empleado = Empleado(
+                cedula=row[0],
+                nombre=row[1],
+                apellido=row[2],
+                correo_electronico=row[3],
+                edad=row[4],
+                codigo=row[5],
+                ubicacion=row[6],
+                clave=row[7]
+            )
+            empleados.append(empleado)
+        conn.close()
+        return empleados
+    
+    @classmethod
+    def save(cls, empleado_data):
+        """Guarda un nuevo empleado en la base de datos"""
+        from conexion_db import obtener_conexion
+        conn = obtener_conexion()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO usuarios (cedula, nombre, apellido, correo, edad, codigo, ubicacion, clave, rol)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'empleado')
+                """, (
+                empleado_data['cedula'],
+                empleado_data['nombre'],
+                empleado_data['apellido'],
+                empleado_data['correo_electronico'],
+                empleado_data['edad'],
+                empleado_data['codigo'],
+                empleado_data['ubicacion'],
+                empleado_data['clave']
+            ))
+            conn.commit()
+            return True
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+            
      
 class Usuario(Persona):
     def __init__(self, cedula, nombre, apellido, correo_electronico, edad):
@@ -83,51 +204,158 @@ class Comando(ABC):
     
 
 class ComandoAgregarEmpleado(Comando):
-    def __init__(self, administrador, empleado):
-        self.administrador = administrador
-        self.empleado = empleado
-
+    def __init__(self, admin, empleado_data):
+        self.admin = admin
+        # Normalizamos los nombres de campos
+        self.empleado_data = {
+            'cedula': empleado_data.get('cedula'),
+            'nombre': empleado_data.get('nombre'),
+            'apellido': empleado_data.get('apellido'),
+            'correo_electronico': empleado_data.get('correo') or empleado_data.get('correo_electronico'),
+            'edad': int(empleado_data.get('edad', 0)),
+            'codigo': empleado_data.get('codigo', 0),
+            'ubicacion': empleado_data.get('ubicacion', 'Terminal'),
+            'clave': empleado_data.get('clave', '')
+        }
+    
     def ejecutar(self):
-        self.administrador.agregar_empleado(self.empleado)
-        print(f"[✔️] Empleado {self.empleado.nombre} agregado.")
+        try:
+            
+            # Lógica para guardar en la base de datos
+            conn = obtener_conexion()
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO usuarios (cedula, nombre, apellido, correo, edad, codigo, ubicacion, clave, rol)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'empleado')
+            """, (
+                self.empleado_data['cedula'],
+                self.empleado_data['nombre'],
+                self.empleado_data['apellido'],
+                self.empleado_data['correo_electronico'],
+                self.empleado_data['edad'],
+                self.empleado_data['codigo'],
+                self.empleado_data['ubicacion'],
+                self.empleado_data['clave']
+            ))
+            conn.commit()
+            conn.close()
+            
+            # Registramos el evento de auditoría
+            self.admin.registrar_evento(
+                f"Empleado agregado: {self.empleado_data['nombre']} {self.empleado_data['apellido']}"
+            )
+            return True, "Empleado agregado correctamente"
+        except Exception as e:
+            return False, f"Error al agregar empleado: {str(e)}"
 
 
 class ComandoEliminarEmpleado(Comando):
-    def __init__(self, administrador, empleado):
-        self.administrador = administrador
-        self.empleado = empleado
-
+    
+    def __init__(self, admin, cedula):
+        self.admin = admin
+        self.cedula = cedula
+    
     def ejecutar(self):
-        self.administrador.eliminar_empleado(self.empleado)
-        print(f"[✔️] Empleado {self.empleado.nombre} eliminado.")
-
+        try:
+            Empleado.delete(self.cedula)
+            self.admin.registrar_evento(f"Eliminó empleado con cédula: {self.cedula}")
+            return True, "Empleado eliminado correctamente"
+        except Exception as e:
+            return False, str(e)
 
 class ComandoVerHistoricoVentas(Comando):
-    def __init__(self, administrador):
-        self.administrador = administrador
-
+    
+    def __init__(self, admin):
+        self.admin = admin
+    
     def ejecutar(self):
-        historial = self.administrador.ver_historico_ventas()
-        print("[📜] Historial de ventas:")
-        print(historial)
-
+        try:
+            query = """
+            SELECT v.id, v.fecha_hora, e.nombre, e.apellido, 
+                   v.destino, v.hora_salida, v.disco_bus, 
+                   v.precio, v.metodo_pago
+            FROM ventas v
+            JOIN empleados e ON v.id_empleado = e.id
+            ORDER BY v.fecha_hora DESC
+            """
+            ventas = db.execute_query(query, fetch=True)
+            
+            # Crear ventana para mostrar resultados
+            ventana = tb.Toplevel(title="Histórico de Ventas")
+            ventana.geometry("1200x600")
+            
+            # Configurar columnas
+            columns = [
+                {"text": "ID", "stretch": False, "width": 50},
+                {"text": "Fecha/Hora", "width": 150},
+                {"text": "Empleado", "width": 150},
+                {"text": "Destino", "width": 100},
+                {"text": "Hora Salida", "width": 100},
+                {"text": "Bus", "width": 100},
+                {"text": "Precio", "width": 80},
+                {"text": "Método Pago", "width": 100}
+            ]
+            
+            # Preparar datos para la tabla
+            rowdata = []
+            for v in ventas:
+                rowdata.append((
+                    v['id'],
+                    v['fecha_hora'].strftime('%Y-%m-%d %H:%M'),
+                    f"{v['nombre']} {v['apellido']}",
+                    v['destino'],
+                    v['hora_salida'],
+                    v['disco_bus'],
+                    f"${v['precio']:.2f}",
+                    v['metodo_pago']
+                ))
+            
+            # Crear la tabla
+            table = Tableview(
+                master=ventana,
+                coldata=columns,
+                rowdata=rowdata,
+                paginated=True,
+                searchable=True,
+                bootstyle="primary",
+                height=20
+            )
+            table.pack(fill="both", expand=True, padx=10, pady=10)
+            
+            # Agregar footer con resumen
+            total_ventas = sum(v['precio'] for v in ventas)
+            footer = tb.Frame(ventana)
+            footer.pack(fill="x", pady=5)
+            
+            tb.Label(
+                footer,
+                text=f"Total de ventas: {len(ventas)} | Ingresos totales: ${total_ventas:.2f}",
+                bootstyle="info"
+            ).pack(side="left")
+            
+            self.admin.registrar_evento("Consultó histórico de ventas")
+            return True, "Consulta exitosa"
+            
+        except Exception as e:
+            print(f"Error al mostrar histórico: {e}")
+            return False, str(e)
             
 class Terminal:
     def __init__(self, ID_Ubicacion: int, ubicacion: str):
         self.ID_Ubicacion = ID_Ubicacion
         self.ubicacion = ubicacion
-         # Agregación
         self._empleados = []
     
     def recibir_transporte(self, transporte):
         print(f"Recibiendo el transporte: {transporte.modelo} en terminal {self.ubicacion}")
+    
     def entrada_empleado(self, empleado):
         self._empleados.append(empleado)
-        print(f"Empleado {empleado.nombre} registrado en terminal {self.ubicacion}")   
+        print(f"Empleado {empleado.nombre} registrado en terminal {self.ubicacion}") 
    
         
 class Transporte(Terminal):
-    def __init__(self, ID_Ubicacion, ubicacion, disco:str, modelo:str, carroceria:str, chasis:str, ID_socio:int, nombre_socio:str, ID_operador:int):
+    def __init__(self, ID_Ubicacion, ubicacion, disco: str, modelo: str, carroceria: str, chasis: str, ID_socio: int, nombre_socio: str, ID_operador: int):
         super().__init__(ID_Ubicacion, ubicacion)
         self.disco = disco
         self.modelo = modelo
@@ -136,13 +364,13 @@ class Transporte(Terminal):
         self.ID_socio = ID_socio
         self.nombre_socio = nombre_socio
         self.ID_operador = ID_operador
-        
+    
     def asignar_ruta(self, ruta):
         print(f"Ruta {ruta} asignada al transporte {self.disco}")
-
+    
     def operarla(self):
         print(f"Transporte {self.disco} está en operación.")
-
+    
     def tiempo_llegada(self, minutos):
         print(f"Tiempo estimado de llegada: {minutos} minutos")
    
@@ -281,6 +509,8 @@ class Pago:
 
     def calcular_monto_final(self):
         return self.estado_descuento.aplicar_descuento(self.monto)
+
+
 
 
 
